@@ -43,18 +43,18 @@ set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 # Specify target & source files to compile it from
 cuda_add_executable(
     fusibile
-    cameraGeometryUtils.h
-    vector_operations.h
-    camera.h
-    globalstate.h
-    algorithmparameters.h
-    cameraparameters.h
-    linestate.h
-    displayUtils.h
-    mathUtils.h
-    fileIoUtils.h
-    fusibile.cu
-    main.cpp
+    src/cameraGeometryUtils.h
+    src/vector_operations.h
+    src/camera.h
+    src/globalstate.h
+    src/algorithmparameters.h
+    src/cameraparameters.h
+    src/linestate.h
+    src/displayUtils.h
+    src/mathUtils.h
+    src/fileIoUtils.h
+    src/fusibile.cu
+    src/main.cpp
     )
 # https://cliutils.gitlab.io/modern-cmake/chapters/packages/OpenMP.html
 find_package(OpenMP)
