@@ -108,7 +108,69 @@ static void get_subfolders(const char *dirname, vector<string> &subfolders) {
   }
 }
 
-static void print_help() { printf("\nfusibile\n"); }
+static void print_help() {
+  printf("\nfusibile.\n");
+  printf("\nBelow are available flags and options:.\n\n");
+
+  printf("\nIMPORTANT FLAGS:\n");
+  printf("\n   -input_folder : Path to inputs. Must contain subfolders for \n");
+  printf("\n   -p_folder : Path to camera projection matrix P (Strecha)\n");
+  printf("\n   -images_folder : Path to camera input images\n");
+  printf("\n   --depth_min : Float value (say 0.001)\n");
+  printf("\n   --depth_max : Float value (say 100000)\n");
+  printf("\n   --normal_thresh : Degree angle value (say 360)\n");
+  printf("\n   --disp_thresh : Float value (say 0.25)\n");
+  printf("\n   --num_consistent : Int value (say 3)\n");
+  printf("\n   -output_folder : Path to write outputs to\n");
+
+  printf("\nLESS COMMONLY USED FLAGS:\n");
+  printf("\n   -krt_file : Path to camera projection matrix P (Strecha)\n");
+  printf("\n   -camera_folder : Path to camera calibration matrix K (Strecha)\n");
+
+  printf("\n   -calib_file : Calibration file containing camera matrices (P) (as provided e.g. by Kitti)\n");
+
+  printf("\n   --algorithm : \n");
+  printf("\n        pm : PM_COST \n");
+  printf("\n        ct : CENSUS_TRANSFORM \n");
+  printf("\n        sct : SPARSE_CENSUS \n");
+  printf("\n        ct_ss : CENSUS_SELFSIMILARITY \n");
+  printf("\n        adct : ADCENSUS \n");
+  printf("\n        adct_ss : ADCENSUS_SELFSIMILARITY \n");
+  printf("\n        pm_ss : PM_SELFSIMILARITY \n");
+
+  printf("\n   --max-disparity : Positive integer \n");
+  printf("\n   --blocksize : Positive odd number\n");
+  printf("\n   --cost_tau_color : \n");
+
+  printf("\n   cost_tau_gradient_opt = --cost_tau_gradient \n");
+  printf("\n   cost_alpha_opt = --cost_alpha \n");
+  printf("\n   cost_gamma_opt = --cost_gamma \n");
+  printf("\n   disparity_tolerance_opt = --disp_tol \n");
+  printf("\n   normal_tolerance_opt = --norm_tol \n");
+  printf("\n   border_value = --border_value \n"); // either constant scalar or -1 = REPLICATE
+  printf("\n   gtDepth_divFactor_opt = --gtDepth_divisionFactor \n");
+  printf("\n   gtDepth_tolerance_opt = --gtDepth_tolerance \n");
+  printf("\n   gtDepth_tolerance2_opt = --gtDepth_tolerance2 \n");
+  printf("\n   nodisplay_opt = -no_display \n");
+  printf("\n   colorProc_opt = -color_processing \n");
+  printf("\n   num_iterations_opt = --iterations \n");
+  printf("\n   self_similariy_n_opt = --ss_n \n");
+  printf("\n   ct_epsilon_opt = --ct_eps \n");
+  printf("\n   cam_scale_opt = --cam_scale \n");
+  printf("\n   num_img_processed_opt = --num_img_processed \n");
+  printf("\n   n_best_opt = --n_best \n");
+  printf("\n   cost_comb_opt = --cost_comb \n");
+  printf("\n   cost_good_factor_opt = --good_factor \n");
+  //    const char* scale_opt         = --scale \n");
+
+  printf("\n   gt_opt = -gt \n");
+  printf("\n   gt_nocc_opt = -gt_nocc \n");
+  printf("\n   occl_mask_opt = -occl_mask \n");
+  printf("\n   gt_normal_opt = -gt_normal \n");
+  printf("\n   bounding_folder_opt = -bounding_folder \n");
+  printf("\n   viewSelection_opt = -view_selection \n");
+  printf("\n   initial_seed_opt = --initial_seed \n");
+}
 
 /* process command line arguments
  * Input: argc, argv - command line arguments
@@ -798,8 +860,8 @@ static int runFusibile(int argc, char **argv,
 
   addImageToTextureFloatColor(normals_and_depth, gs->normals_depths);
 
-#define pow2(x) ((x) * (x))
-#define get_pow2_norm(x, y) (pow2(x) + pow2(y))
+// #define pow2(x) ((x) * (x))
+// #define get_pow2_norm(x, y) (pow2(x) + pow2(y))
 
   runcuda(*gs, pc_list, numSelViews);
   // Mat_<Vec3f> norm0 = Mat::zeros ( img_grayscale[0].rows,
