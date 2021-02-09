@@ -360,12 +360,12 @@ void fusibile_cu(GlobalState &gs, PointCloudList &pc_list, int num_views)
     /*printf("MIN DISP is %f\n", gs.params.min_disparity);*/
     cudaSetDevice(i);
     cudaDeviceSetLimit(cudaLimitPrintfFifoSize, 1024*128);
-    dim3 grid_size;
-    grid_size.x=(cols+BLOCK_W-1)/BLOCK_W;
-    grid_size.y=((rows/2)+BLOCK_H-1)/BLOCK_H;
-    dim3 block_size;
-    block_size.x=BLOCK_W;
-    block_size.y=BLOCK_H;
+    // dim3 grid_size;
+    // grid_size.x=(cols+BLOCK_W-1)/BLOCK_W;
+    // grid_size.y=((rows/2)+BLOCK_H-1)/BLOCK_H;
+    // dim3 block_size;
+    // block_size.x=BLOCK_W;
+    // block_size.y=BLOCK_H;
 
     dim3 grid_size_initrand;
     grid_size_initrand.x=(cols+32-1)/32;
