@@ -1,0 +1,1 @@
+python3  depthfusion.py --dense_folder=/home/ubuntu/deepDSO_outputs
