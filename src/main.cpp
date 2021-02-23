@@ -1,29 +1,27 @@
 #ifdef _WIN32
 #define NOMINMAX
-#include <windows.h>
+#include "win32_dirent.h"
 #include <ctime>
 #include <direct.h>
-#include "win32_dirent.h"
+#include <windows.h>
 #define access _access
 #else
 #include <dirent.h>
 #endif
 
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <sys/types.h>
 
 // Includes CUDA
-#include <cuda_runtime.h>
 #include <cuda.h>
+#include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <cuda_texture_types.h>
 #include <vector_types.h>
-
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -33,24 +31,23 @@
 #endif
 
 // CUDA helper functions
-#include "helper_cuda.h"         // helper functions for CUDA error check
+#include "helper_cuda.h" // helper functions for CUDA error check
 
 #include <map> // multimap
 
-#include <sys/stat.h> // mkdir
+#include <sys/stat.h>  // mkdir
 #include <sys/types.h> // mkdir
-
 
 //#include "camera.h"
 #include "algorithmparameters.h"
-#include "globalstate.h"
 #include "fusibile.h"
+#include "globalstate.h"
 
-#include "main.h"
-#include "fileIoUtils.h"
 #include "cameraGeometryUtils.h"
-#include "mathUtils.h"
 #include "displayUtils.h"
+#include "fileIoUtils.h"
+#include "main.h"
+#include "mathUtils.h"
 #include "point_cloud_list.h"
 
 #define MAX_NR_POINTS 500000
@@ -125,9 +122,11 @@ static void print_help() {
 
   printf("\nLESS COMMONLY USED FLAGS:\n");
   printf("\n   -krt_file : Path to camera projection matrix P (Strecha)\n");
-  printf("\n   -camera_folder : Path to camera calibration matrix K (Strecha)\n");
+  printf(
+      "\n   -camera_folder : Path to camera calibration matrix K (Strecha)\n");
 
-  printf("\n   -calib_file : Calibration file containing camera matrices (P) (as provided e.g. by Kitti)\n");
+  printf("\n   -calib_file : Calibration file containing camera matrices (P) "
+         "(as provided e.g. by Kitti)\n");
 
   printf("\n   --algorithm : \n");
   printf("\n        pm : PM_COST \n");
@@ -147,7 +146,8 @@ static void print_help() {
   printf("\n   cost_gamma_opt = --cost_gamma \n");
   printf("\n   disparity_tolerance_opt = --disp_tol \n");
   printf("\n   normal_tolerance_opt = --norm_tol \n");
-  printf("\n   border_value = --border_value \n"); // either constant scalar or -1 = REPLICATE
+  printf("\n   border_value = --border_value \n"); // either constant scalar or
+                                                   // -1 = REPLICATE
   printf("\n   gtDepth_divFactor_opt = --gtDepth_divisionFactor \n");
   printf("\n   gtDepth_tolerance_opt = --gtDepth_tolerance \n");
   printf("\n   gtDepth_tolerance2_opt = --gtDepth_tolerance2 \n");
@@ -860,8 +860,8 @@ static int runFusibile(int argc, char **argv,
 
   addImageToTextureFloatColor(normals_and_depth, gs->normals_depths);
 
-// #define pow2(x) ((x) * (x))
-// #define get_pow2_norm(x, y) (pow2(x) + pow2(y))
+  // #define pow2(x) ((x) * (x))
+  // #define get_pow2_norm(x, y) (pow2(x) + pow2(y))
 
   runcuda(*gs, pc_list, numSelViews);
   // Mat_<Vec3f> norm0 = Mat::zeros ( img_grayscale[0].rows,
