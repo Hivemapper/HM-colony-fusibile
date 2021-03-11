@@ -43,12 +43,13 @@
 #include "fusibile.h"
 #include "globalstate.h"
 
-#include "cameraGeometryUtils.h"
-#include "displayUtils.h"
-#include "fileIoUtils.h"
 #include "main.h"
+#include "fileIoUtils.h"
+#include "cameraGeometryUtils.h"
 #include "mathUtils.h"
+#include "displayUtils.h"
 #include "point_cloud_list.h"
+#include "BinaryCvMat.h"
 
 #define MAX_NR_POINTS 500000
 
@@ -626,7 +627,7 @@ static int runFusibile(int argc, char **argv,
   pTime = localtime(&timeObj);
 
   char output_folder[256];
-  sprintf(output_folder, "%s/consistencyCheck-%04d%02d%02d-%02d%02d%02d/",
+  sprintf(output_folder, "%s/consistencyCheck-%04d%02d%02d-%02d%02d%02d",
           results_folder.c_str(), pTime->tm_year + 1900, pTime->tm_mon + 1,
           pTime->tm_mday, pTime->tm_hour, pTime->tm_min, pTime->tm_sec);
 #if defined(_WIN32)
@@ -653,18 +654,20 @@ static int runFusibile(int argc, char **argv,
   for (size_t i = 0; i < subfolders.size(); i++) {
     // make sure that it has the right format (DATE_TIME_INDEX)
     size_t n = std::count(subfolders[i].begin(), subfolders[i].end(), '_');
-    if (n < 2)
+    if (n < 2){
       continue;
-    if (subfolders[i][0] != '2')
+    }
+    if (subfolders[i][0] != 'c'){ // To check for "camera_data" folder prefix as defined in depthfusion.py (line 246)
       continue;
+    }
 
     // get index
     // unsigned found = subfolders[i].find_last_of("_");
     // find second index
     unsigned posFirst = subfolders[i].find_first_of("_") + 1;
     unsigned found =
-        subfolders[i].substr(posFirst).find_first_of("_") + posFirst + 1;
-    string id_string = subfolders[i].substr(found);
+        subfolders[i].substr(posFirst).find_first_of("_") + posFirst + 2;
+    std::string id_string = subfolders[i].substr(found);
     // InputData dat;
 
     // consideredIds.push_back(id_string);
@@ -675,14 +678,15 @@ static int runFusibile(int argc, char **argv,
     // sprintf(outputPath, "%s.png", id_string);
 
     if (access((inputFiles.images_folder + id_string + ".png").c_str(), R_OK) !=
-        -1)
+        -1) {
       inputFiles.img_filenames.push_back((id_string + ".png"));
-    else if (access((inputFiles.images_folder + id_string + ".jpg").c_str(),
-                    R_OK) != -1)
+    } else if (access((inputFiles.images_folder + id_string + ".jpg").c_str(),
+                      R_OK) != -1) {
       inputFiles.img_filenames.push_back((id_string + ".jpg"));
-    else if (access((inputFiles.images_folder + id_string + ".ppm").c_str(),
-                    R_OK) != -1)
+    } else if (access((inputFiles.images_folder + id_string + ".ppm").c_str(),
+                      R_OK) != -1) {
       inputFiles.img_filenames.push_back((id_string + ".ppm"));
+    }
   }
   size_t numImages = inputFiles.img_filenames.size();
   cout << "numImages is " << numImages << endl;
@@ -776,15 +780,28 @@ static int runFusibile(int argc, char **argv,
     dat.inputImage =
         imread((inputFiles.images_folder + id + ext), IMREAD_COLOR);
 
-    // read normal
-    cout << "Reading normal " << i << endl;
+    // Read normal
     readDmbNormal((dat.path + "/normals.dmb").c_str(), dat.normals);
 
-    // read depth
-    cout << "Reading disp " << i << endl;
-    readDmb((dat.path + "/disp.dmb").c_str(), dat.depthMap);
+    // Read disparity / inverse depth image from deepDSO
+    LoadMatBinary((dat.path + "/disp.bin").c_str(), dat.depthMap);
 
-    // inputData.push_back(move(dat));
+    //====================================================================
+    // Convert inverse depth to depth
+    auto depth = 1.0 / (dat.depthMap + 0.0000001);
+    float maxdepth = 100.0;
+    float mindepth = 0.001;
+    cv::Mat depthNewThresh;
+    cv::threshold(depth, depthNewThresh, maxdepth, 0.0, THRESH_TOZERO_INV);
+    cv::threshold(depthNewThresh, depthNewThresh, mindepth, 0.0, THRESH_TOZERO);
+
+    double minVal;
+    double maxVal;
+    cv::minMaxLoc(depthNewThresh, &minVal, &maxVal);
+    std::cout << "DEPTH (converted) " << i << "  maxVal = " << maxVal << " minVal = " << minVal << std::endl;
+
+    dat.depthMap = depthNewThresh;
+    //====================================================================
     inputData.push_back(dat);
   }
   // run gpu run
@@ -868,7 +885,8 @@ static int runFusibile(int argc, char **argv,
   // img_grayscale[0].cols, CV_32FC3 );
   Mat_<float> distImg;
   char plyFile[256];
-  sprintf(plyFile, "%s/final3d_model.ply", output_folder);
+  // sprintf(plyFile, "%s/final3d_model.ply", output_folder)
+  sprintf(plyFile, "./final3d_model.ply");
   printf("Writing ply file %s\n", plyFile);
   // storePlyFileAsciiPointCloud ( plyFile, pc_list, inputData[0].cam, distImg);
   storePlyFileBinaryPointCloud(plyFile, pc_list, distImg);

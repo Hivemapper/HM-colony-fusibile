@@ -1,5 +1,5 @@
 /*
- * utility functions for camera geometry related stuff
+ * Utility functions for camera geometry related stuff
  * most of them from: "Multiple View Geometry in computer vision" by Hartley and
  * Zisserman
  */
@@ -8,6 +8,7 @@
 #include "mathUtils.h"
 #include <limits>
 #include <signal.h>
+#include <filesystem>
 
 Mat_<float> getColSubMat(Mat_<float> M, int *indices, int numCols) {
   Mat_<float> subMat = Mat::zeros(M.rows, numCols, CV_32F);
@@ -48,7 +49,7 @@ Mat_<float> getCameraCenter(Mat_<float> &P) {
 }
 
 inline Vec3f get3Dpoint(Camera &cam, float x, float y, float depth) {
-  // in case camera matrix is not normalized: see page 162, then depth might not
+  // In case camera matrix is not normalized: see page 162, then depth might not
   // be the real depth but w and depth needs to be computed from that first
 
   Mat_<float> pt = Mat::ones(3, 1, CV_32F);
@@ -64,7 +65,7 @@ inline Vec3f get3Dpoint(Camera &cam, int x, int y, float depth) {
   return get3Dpoint(cam, (float)x, (float)y, depth);
 }
 
-// get the viewing ray for a pixel position of the camera
+// Get the viewing ray for a pixel position of the camera
 static inline Vec3f getViewVector(Camera &cam, int x, int y) {
 
   // get some point on the line (the other point on the line is the camera
@@ -76,7 +77,7 @@ static inline Vec3f getViewVector(Camera &cam, int x, int y) {
   return normalize(v);
 }
 
-// get d parameter of plane pi = [nT, d]T, which is the distance of the plane to
+// Get d parameter of plane pi = [nT, d]T, which is the distance of the plane to
 // the camera center
 float inline getPlaneDistance(Vec3f &normal, Vec3f &X) {
   /*return -normal ( 0 )*X ( 0 )-normal ( 1 )*X ( 1 )-normal ( 2 )*X ( 2 );*/
@@ -105,7 +106,7 @@ Mat_<float> getTransformationMatrix(Mat_<float> R, Mat_<float> t) {
   return transMat;
 }
 
-/* compute depth value from disparity or disparity value from depth
+/* Compute depth value from disparity or disparity value from depth
  * Input:  f         - focal length in pixel
  *         baseline  - baseline between cameras (in meters)
  *         d - either disparity or depth value
@@ -186,7 +187,7 @@ void copyOpencvMatToFloatArray(Mat_<float> &m, float **a) {
     }
 }
 
-/* get camera parameters (e.g. projection matrices) from file
+/* Get camera parameters (e.g. projection matrices) from file
  * Input:  inputFiles  - pathes to calibration files
  *         scaleFactor - if image was rescaled we need to adapt calibration
  * matrix K accordingly Output: camera parameters
@@ -199,65 +200,17 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
   CameraParameters params;
   size_t numCameras = 2;
   params.cameras.resize(numCameras);
-  // get projection matrices
 
-  // load projection matrix from file (e.g. for Kitti)
+  ///////////////////////////////////////////////////////////////////////////////////////////////
+  // Get projection matrices
+
+  // Load projection matrix from file (e.g. for Kitti)
   if (!inputFiles.calib_filename.empty()) {
-    // two view case
+    // Two view case
     readCalibFileKitti(inputFiles.calib_filename, params.cameras[0].P,
                        params.cameras[1].P);
     params.rectified = false; // for Kitti data is actually rectified, set this
                               // to true for computation in disparity space
-
-    /*
-    //four view case
-    numCameras = 4;
-    params.cameras.resize ( numCameras );
-    readCalibFileKitti (
-    inputFiles.calib_filename,params.cameras[0].P,params.cameras[1].P );
-    params.rectified = false; // for Kitti data is actually rectified, set this
-    to true for computation in disparity space
-
-    Mat_<float> Rt_110 = Mat::eye ( 4, 4, CV_32F );
-    //110
-    // 0.9999    0.0043    0.0118    0.0008
-    //-0.0044    1.0000    0.0027    0.0008
-    //-0.0118   -0.0028    0.9999   -0.6181
-    Rt_110(0,0) = 0.9999f;
-    Rt_110(0,1) = 0.0043f;
-    Rt_110(0,2) = 0.0118f;
-    Rt_110(0,3) = 0.0008f;
-    Rt_110(1,0) = -0.0044f;
-    Rt_110(1,1) = 1.0000f;
-    Rt_110(1,2) = 0.0027f;
-    Rt_110(1,3) = 0.0008f;
-    Rt_110(2,0) = -0.0118f;
-    Rt_110(2,1) = -0.0028f;
-    Rt_110(2,2) = 0.9999f;
-    Rt_110(2,3) =-0.6181f;
-
-    params.cameras[2].P = params.cameras[0].P.clone();
-    params.cameras[3].P = params.cameras[1].P.clone();
-
-    Mat_<float> K,R,T,C,t;
-    //left camera
-    decomposeProjectionMatrix ( params.cameras[2].P,K,R,T);
-    // get 3-dimensional translation vectors and camera center (divide by
-    augmented component) C = T ( Range ( 0,3 ),Range ( 0,1 ) ) / T ( 3,0 ); t =
-    -R * C; transformCamera ( R,t,Rt_110,params.cameras[2],K );
-
-    //right camera
-    decomposeProjectionMatrix ( params.cameras[3].P,K,R,T);
-    // get 3-dimensional translation vectors and camera center (divide by
-    augmented component) C = T ( Range ( 0,3 ),Range ( 0,1 ) ) / T ( 3,0 ); t =
-    -R * C; transformCamera ( R,t,Rt_110,params.cameras[3],K );
-
-
-    cout << params.cameras[0].P <<endl;
-    cout << params.cameras[1].P <<endl;
-    cout << params.cameras[2].P <<endl;
-    cout << params.cameras[3].P <<endl;
-    */
   }
   Mat_<float> KMaros = Mat::eye(3, 3, CV_32F);
   KMaros(0, 0) = 8066.0;
@@ -265,34 +218,15 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
   KMaros(0, 2) = 2807.5;
   KMaros(1, 2) = 1871.5;
 
-  // Load pmvs files
-  if (!inputFiles.pmvs_folder.empty()) {
-    numCameras = inputFiles.img_filenames.size();
-    params.cameras.resize(numCameras);
-    for (size_t i = 0; i < numCameras; i++) {
-      int lastindex = inputFiles.img_filenames[i].find_last_of(".");
-      string filename_without_extension =
-          inputFiles.img_filenames[i].substr(0, lastindex);
-      readPFileStrechaPmvs(inputFiles.p_folder + filename_without_extension +
-                               ".txt",
-                           params.cameras[i].P);
-      unsigned found = inputFiles.img_filenames[i].find_last_of(".");
-      // params.cameras[i].id = atoi ( inputFiles.img_filenames[i].substr (
-      // 0,found ).c_str () );
-      params.cameras[i].id =
-          inputFiles.img_filenames[i].substr(0, found).c_str();
-      // params.cameras[i].P = KMaros * params.cameras[i].P;
-      // cout << params.cameras[i].P << endl;
-    }
-  }
-  // load projection matrix from file (e.g. for Strecha)
+  // Load projection matrix from file (e.g. for Strecha)
   cout << "P folder is " << inputFiles.p_folder << endl;
   if (!inputFiles.p_folder.empty()) {
     numCameras = inputFiles.img_filenames.size();
     params.cameras.resize(numCameras);
     for (size_t i = 0; i < numCameras; i++) {
-      readPFileStrechaPmvs(inputFiles.p_folder + inputFiles.img_filenames[i] +
-                               ".P",
+      std::string prefix =
+          std::filesystem::path(inputFiles.img_filenames[i]).stem();
+      readPFileStrechaPmvs(inputFiles.p_folder + prefix + ".P",
                            params.cameras[i].P);
       unsigned found = inputFiles.img_filenames[i].find_last_of(".");
       // params.cameras[i].id = atoi ( inputFiles.img_filenames[i].substr (
@@ -302,18 +236,8 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
       /*params.cameras[i].P = KMaros * params.cameras[i].P;*/
     }
   }
-  // load projection matrix from file (e.g. for Middlebury)
-  if (!inputFiles.krt_file.empty()) {
-    numCameras = inputFiles.img_filenames.size();
-    params.cameras.resize(numCameras);
-    /*cout << "Num Cameras " << numCameras << endl;*/
-    readKRtFileMiddlebury(inputFiles.krt_file, params.cameras, inputFiles);
-    for (size_t i = 0; i < numCameras; i++) {
-      unsigned found = inputFiles.img_filenames[i].find_last_of(".");
-      params.cameras[i].id =
-          inputFiles.img_filenames[i].substr(0, found).c_str();
-    }
-  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////////////
 
   /*cout << "KMaros is" << endl;*/
   /*cout << KMaros << endl;*/
@@ -328,22 +252,27 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
   vector<Mat_<float>> t(numCameras);
 
   for (size_t i = 0; i < numCameras; i++) {
-    decomposeProjectionMatrix(params.cameras[i].P, K[i], R[i], T[i]);
+    decomposeProjectionMatrix(
+        params.cameras[i].P, K[i], R[i],
+        T[i]); // params.cameras[i].P is a 3x4 input projection matrix
 
-    /*cout << "K: " << K[i] << endl;*/
-    /*cout << "R: " << R[i] << endl;*/
-    /*cout << "T: " << T[i] << endl;*/
+    // std::cout << " File = " << inputFiles.img_filenames[i] << std::endl;
+    // std::cout << "P: " << params.cameras[i].P << std::endl;
+    // std::cout << "K: " << K[i] << std::endl;
+    // std::cout << "R: " << R[i] << std::endl;
+    // std::cout << "T: " << T[i] << std::endl;
+    // std::cout << "---------------------------------------\n" << std::endl;
 
-    // get 3-dimensional translation vectors and camera center (divide by
+    // Get 3-dimensional translation vectors and camera center (divide by
     // augmented component)
     C[i] = T[i](Range(0, 3), Range(0, 1)) / T[i](3, 0);
     t[i] = -R[i] * C[i];
 
-    /*cout << "C: " << C[i] << endl;*/
-    /*cout << "t: " << t[i] << endl;*/
+    // std::cout << "C: " << C[i] << std::endl;
+    // std::cout << "t: " << t[i] << std::endl;
   }
 
-  // transform projection matrices (R and t part) so that P1 = K [I | 0]
+  // Transform projection matrices (R and t part) so that P1 = K [I | 0]
   // computeTranslatedProjectionMatrices(R1, R2, t1, t2, params);
   Mat_<float> transform = Mat::eye(4, 4, CV_32F);
 
@@ -357,7 +286,7 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
   /*K[0](0,1)=0;*/
   /*K[0](2,2)=1;*/
 
-  // assuming K is the same for all cameras
+  // Assuming K is the same for all cameras
   params.K = scaleK(K[0], scaleFactor);
   params.K_inv = params.K.inv();
   // get focal length from calibration matrix
@@ -400,7 +329,7 @@ CameraParameters getCameraParameters(CameraParameters_cu &cpc,
     params.cameras[i].P_inv = params.cameras[i].P.inv(DECOMP_SVD);
     params.cameras[i].M_inv = params.cameras[i].P.colRange(0, 3).inv();
 
-    // set camera baseline (if unknown we need to guess something)
+    // Set camera baseline (if unknown we need to guess something)
     // float b = (float)norm(t1,t2,NORM_L2);
     params.cameras[i].baseline = 0.54f; // 0.54 = Kitti baseline
 

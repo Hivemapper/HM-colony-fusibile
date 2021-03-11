@@ -84,7 +84,7 @@ static void readPFileStrechaPmvs(const string p_filename, Mat_<float> &P){
     ifstream myfile;
     myfile.open(p_filename.c_str(),ifstream::in);
 
-    //cout <<"Opening file " << p_filename << endl;
+    // std::cout << "Opening file " << p_filename << std::endl;
     for( int i = 0; i < 4; i++){
         if (myfile.eof())
             break;
@@ -96,7 +96,7 @@ static void readPFileStrechaPmvs(const string p_filename, Mat_<float> &P){
             continue;
         }
 
-        //cout << "Line is "<< line << endl;
+        // std::cout << "Line is " << line << std::endl;
         const char* p;
         int j = 0;
         for (p = strtok( line, " " );  p;  p = strtok( NULL, " " ))
@@ -108,72 +108,7 @@ static void readPFileStrechaPmvs(const string p_filename, Mat_<float> &P){
     }
     myfile.close();
 }
-static void readKRtFileMiddlebury(const string filename, vector<Camera> cameras, InputFiles inputFiles)
-{
-    ifstream myfile;
-    myfile.open( filename, ifstream::in );
-    string line;
 
-    getline (myfile, line); // throw away first line
-
-    int i=0;
-    int truei=-1;
-    while( getline( myfile,line) )
-    {
-        /*cout << "Line is "<< line << endl;*/
-        Mat Rt;
-        Mat_<float> K = Mat::zeros( 3, 3, CV_32F );
-        Mat_<float> R = Mat::zeros( 3, 3, CV_32F );
-        Vec3f vt;
-        stringstream ss(line);
-        string tmp;
-        ss >> tmp
-        >> K(0,0) >> K(0,1) >> K(0,2) >> K(1,0) >> K(1,1) >> K(1,2) >> K(2,0) >> K(2,1) >> K(2,2) //
-        >> R(0,0) >> R(0,1) >> R(0,2) >> R(1,0) >> R(1,1) >> R(1,2) >> R(2,0) >> R(2,1) >> R(2,2) //
-        >> vt(0) >> vt(1) >> vt(2);
-        /*cout << "K is " << K << endl;*/
-        /*cout << "R is " << R << endl;*/
-        /*cout << "t is " << vt << endl;*/
-        //cout << "Filename is " << tmp << endl;
-        //cout << "image Filename is " << inputFiles.img_filenames[i] << endl;
-        for( size_t j = 0; j < inputFiles.img_filenames.size(); j++) {
-            if( tmp == inputFiles.img_filenames[j]) {
-                truei=j;
-                break;
-            }
-        }
-        Mat t(vt, false);
-        /*Mat t(vt);*/
-        hconcat(R, t, Rt);
-        cameras[truei].P = K*Rt;
-        /*cout << "Rt is " << Rt<< endl;*/
-        /*cout << "P is " << P << endl;*/
-        /*cout << "P is " << cameras[i].P << endl;*/
-        i++;
-    }
-
-
-    /*while (os >> temp)                //the stringstream makes temp a token*/
-        /*std::cout <<temp <<std::endl;   //and deletes that token from itself*/
-    //the token can now be
-    //outputted to console, or put into an array,
-    //or whatever you choose to do ith it .
-    return;
-}
-
-static void readCalibFileDaisy(const string calib_filename, Mat_<float> &P){
-    ifstream myfile;
-    myfile.open(calib_filename.c_str(),ifstream::in);
-
-    char line[512];
-    while (myfile.getline(line, 512)) {
-        if(line[0] == 'p')
-            getProjectionMatrix(line,P);
-    }
-
-
-    myfile.close();
-}
 
 static void writeImageToFile(const char* outputFolder,const char* name,const Mat &img){
     char outputPath[256];

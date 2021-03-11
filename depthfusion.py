@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 """
-Copyright 2019, Yao Yao, HKUST.
-Convert MVSNet output to Gipuma format for post-processing.
+Copyright 2021, Taylor Dahlke
+Convert deepDSO output to Gipuma format for post-processing.
+Based on python script from:
+https://github.com/YoYo000/MVSNet/blob/4c4aa5e2336a214e4bde2de31c9a46f55a8150c5/mvsnet/depthfusion.py
 """
 
 from __future__ import print_function
@@ -23,20 +25,35 @@ import numpy as np
 import pylab as plt
 from preprocess import *
 
+import imageio
+import struct
+import shutil
 
-def read_gipuma_dmb(path):
-    '''read Gipuma .dmb format image'''
+def read_in_bin(in_path):
 
-    with open(path, "rb") as fid:
+    file = open(in_path, "rb")
+    fileContent = file.read()
+    file.close()
+    # Read in the header
+    a = struct.unpack("iii", fileContent[:12])
+    height = a[0]
+    width = a[1]
 
-        image_type = unpack('<i', fid.read(4))[0]
-        height = unpack('<i', fid.read(4))[0]
-        width = unpack('<i', fid.read(4))[0]
-        channel = unpack('<i', fid.read(4))[0]
+    # Check data type
+    data_type = a[2]
+    if (data_type != 5):  # data_type = 5 means type CV_32F
+        print("Data type ", data_type,
+              " is not recognized. For reference see: http://ninghang.blogspot.com/2012/11/list-of-mat-type-in-opencv.html")
+        exit()
 
-        array = np.fromfile(fid, np.float32)
-    array = array.reshape((width, height, channel), order="F")
-    return np.transpose(array, (1, 0, 2)).squeeze()
+    # Read in the data
+    a = struct.unpack("f" * ((len(fileContent) - 16) // 4), fileContent[12:-4])
+    b = struct.unpack("f", fileContent[-4:])  # last element
+    c = a + b
+    d = np.array(c)
+    output_array = np.reshape(d, (height, width))
+
+    return output_array
 
 
 def write_gipuma_dmb(path, image):
@@ -63,56 +80,31 @@ def write_gipuma_dmb(path, image):
     return
 
 
-def mvsnet_to_gipuma_dmb(in_path, out_path):
-    '''convert mvsnet .pfm output to Gipuma .dmb format'''
+def gipuma_normal(in_depth_path, out_normal_path):
 
-    image = load_pfm(open(in_path))
-    write_gipuma_dmb(out_path, image)
+    depth_image = read_in_bin(in_depth_path)
 
-    return
+    # Calculate a normal image
+    # zy, zx = np.gradient(depth_image)
+    # You may also consider using Sobel to get a joint Gaussian smoothing and differentation to reduce noise
+    zx = cv2.Sobel(depth_image, cv2.CV_64F, 1, 0, ksize=5)
+    zy = cv2.Sobel(depth_image, cv2.CV_64F, 0, 1, ksize=5)
 
+    normal = np.dstack((-zx, -zy, np.ones_like(depth_image)))
+    n = np.linalg.norm(normal, axis=2)
+    normal[:, :, 0] /= n
+    normal[:, :, 1] /= n
+    normal[:, :, 2] /= n
+    normal_image=normal
 
-def mvsnet_to_gipuma_cam(in_path, out_path):
-    '''convert mvsnet camera to gipuma camera format'''
-
-    cam = load_cam(open(in_path))
-
-    extrinsic = cam[0:4][0:4][0]
-    intrinsic = cam[0:4][0:4][1]
-    intrinsic[3][0] = 0
-    intrinsic[3][1] = 0
-    intrinsic[3][2] = 0
-    intrinsic[3][3] = 0
-    projection_matrix = np.matmul(intrinsic, extrinsic)
-    projection_matrix = projection_matrix[0:3][:]
-
-    f = open(out_path, "w")
-    for i in range(0, 3):
-        for j in range(0, 4):
-            f.write(str(projection_matrix[i][j]) + ' ')
-        f.write('\n')
-    f.write('\n')
-    f.close()
-
-    return
-
-
-def fake_gipuma_normal(in_depth_path, out_normal_path):
-
-    depth_image = read_gipuma_dmb(in_depth_path)
+    # Make masking
     image_shape = np.shape(depth_image)
-
-    normal_image = np.ones_like(depth_image)
-    normal_image = np.reshape(
-        normal_image, (image_shape[0], image_shape[1], 1))
-    normal_image = np.tile(normal_image, [1, 1, 3])
-    normal_image = normal_image / 1.732050808
-
     mask_image = np.squeeze(np.where(depth_image > 0, 1, 0))
     mask_image = np.reshape(mask_image, (image_shape[0], image_shape[1], 1))
     mask_image = np.tile(mask_image, [1, 1, 3])
     mask_image = np.float32(mask_image)
 
+    # Mask and write out normal image
     normal_image = np.multiply(normal_image, mask_image)
     normal_image = np.float32(normal_image)
 
@@ -120,11 +112,97 @@ def fake_gipuma_normal(in_depth_path, out_normal_path):
     return
 
 
-def mvsnet_to_gipuma(dense_folder, gipuma_point_folder):
+def deepdso_to_gipuma_cam(intrin_path, extrin_path, out_dir):
+    '''convert deepDSO camera to gipuma camera format'''
+
+    ########################################################################
+    # camera_poses.txt is the input file from deepDSO
+    #   timestamp, camToWorld.translation().x, camToWorld.translation().y, camToWorld.translation().z, camToWorld.so3().unit_quaternion().x(), camToWorld.so3().unit_quaternion().y(), camToWorld.so3().unit_quaternion().z(), camToWorld.so3().unit_quaternion().w()
+    ########################################################################
+
+    # Extrinsics matrix (3x4)
+    #
+    # E = [ R T ]
+    #
+    extrinsics = []
+    camera_prefixes = []
+    numposes = 0
+    with open(extrin_path) as f:
+        for line in f:
+            numposes = numposes + 1
+            if (numposes == 1):
+                continue  # Skip the first line which is a header
+
+            extrinsicM = np.zeros((3, 4), dtype=float)
+            a = np.fromstring(line, dtype=float, sep=' ')
+            b = line.split()
+            camera_prefixes.append(b[1])
+            # Translation matrix (T)
+            extrinsicM[0:3, 3] = np.transpose(a[2:5])
+            # Rotation matrix (R)
+            extrinsicM[0, 0:3] = a[5:8]
+            extrinsicM[1, 0:3] = a[8:11]
+            extrinsicM[2, 0:3] = a[11:14]
+
+            extrinsics.append(extrinsicM)
+    extrinsics = np.stack(extrinsics)
+
+    # Intrinsics matrix
+    intrinsic = np.zeros((3, 3), dtype=float)
+
+    with open(intrin_path) as f:
+        count = 0
+        for line in f:
+            count = count + 1
+            a = np.fromstring(line, sep=' ')
+            if (count == 1):  # Line #1 (height, width)
+                h = a[0]
+                w = a[1]
+            if (count == 2):  # K matrix (line 1)
+                fx = a[0]
+                cx = a[2]
+            if(count == 3):  # K matrix (line 2)
+                fy = a[1]
+                cy = a[2]
+
+    print("fx = ",fx, "  fy = ", fy, "  cx = ", cx, "  cy = ", cy, "  w = ", w, "  h = ", h)
+
+    k = 1.0  # pixels/cm on image horizontal
+    l = 1.0  # pixels/cm on image vertical
+    # When k=l, the pixels are square (the most common case)
+    alpha = fx*k
+    beta = fy*l
+    intrinsic[0, 0] = alpha
+    intrinsic[1, 1] = beta
+    intrinsic[0, 2] = cx
+    intrinsic[1, 2] = cy
+    intrinsic[2, 2] = 1.0
+
+    # Make outputs for each camera pose
+    for i in range(0, numposes-1):
+
+        # Construct projection matrix
+        extrinsic = extrinsics[i, :, :]
+        projection_matrix = np.matmul(intrinsic, extrinsic)
+
+        # Write out the camera file
+        out_path = out_dir + "/" + str(camera_prefixes[i]) + ".P"
+        f = open(out_path, "w")
+        for i in range(0, 3):
+            for j in range(0, 4):
+                f.write(str(projection_matrix[i][j]) + ' ')
+            f.write('\n')
+        f.write('\n')
+        f.close()
+
+    return
+
+
+def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
 
     image_folder = os.path.join(dense_folder, 'images')
     cam_folder = os.path.join(dense_folder, 'cams')
-    depth_folder = os.path.join(dense_folder, 'depths_mvsnet')
+    depth_folder = os.path.join(dense_folder, 'depthmaps')
 
     gipuma_cam_folder = os.path.join(gipuma_point_folder, 'cams')
     gipuma_image_folder = os.path.join(gipuma_point_folder, 'images')
@@ -135,56 +213,44 @@ def mvsnet_to_gipuma(dense_folder, gipuma_point_folder):
     if not os.path.isdir(gipuma_image_folder):
         os.mkdir(gipuma_image_folder)
 
-    # convert cameras
+    # Convert cameras
     image_names = os.listdir(image_folder)
-    for image_name in image_names:
-        image_prefix = os.path.splitext(image_name)[0]
-        in_cam_file = os.path.join(depth_folder, image_prefix+'.txt')
-        out_cam_file = os.path.join(gipuma_cam_folder, image_name+'.P')
-        mvsnet_to_gipuma_cam(in_cam_file, out_cam_file)
+    intrin_cam_file = os.path.join(dense_folder, 'intrinsic_matrix.txt')
+    extrin_cam_file = os.path.join(dense_folder, 'camera_poses.txt')
+    deepdso_to_gipuma_cam(intrin_cam_file, extrin_cam_file, gipuma_cam_folder)
+    camera_names = os.listdir(gipuma_cam_folder)
 
-    # copy images to gipuma image folder
-    image_names = os.listdir(image_folder)
-    for image_name in image_names:
-        in_image_file = os.path.join(depth_folder, image_name)
-        out_image_file = os.path.join(gipuma_image_folder, image_name)
-        shutil.copy(in_image_file, out_image_file)
+    # Convert depth maps and normal maps. Only for depthmaps that correspond to a saved camera.
+    # If the camera wasn't saved, it is likely because deepDSO considered it an
+    # invalid pose / marginalized frame (see deepDSO output logs).
+    gipuma_prefix = 'camera_data__'
+    for camera_name in camera_names:
 
-    # convert depth maps and fake normal maps
-    gipuma_prefix = '2333__'
-    for image_name in image_names:
-
-        image_prefix = os.path.splitext(image_name)[0]
+        image_prefix = os.path.splitext(camera_name)[0]
         sub_depth_folder = os.path.join(
-            gipuma_point_folder, gipuma_prefix+image_prefix)
+            gipuma_point_folder, gipuma_prefix+(image_prefix))
         if not os.path.isdir(sub_depth_folder):
             os.mkdir(sub_depth_folder)
-        in_depth_pfm = os.path.join(
-            depth_folder, image_prefix+'_prob_filtered.pfm')
-        out_depth_dmb = os.path.join(sub_depth_folder, 'disp.dmb')
-        fake_normal_dmb = os.path.join(sub_depth_folder, 'normals.dmb')
-        mvsnet_to_gipuma_dmb(in_depth_pfm, out_depth_dmb)
-        fake_gipuma_normal(out_depth_dmb, fake_normal_dmb)
 
+        # Copy inverse depth map
+        out_depth_bin = os.path.join(sub_depth_folder, 'disp.bin')
+        in_depth_bin = os.path.join(
+            depth_folder, image_prefix+'.bin')
+        shutil.copy(in_depth_bin, out_depth_bin)
 
-def probability_filter(dense_folder, prob_threshold):
-    image_folder = os.path.join(dense_folder, 'images')
-    depth_folder = os.path.join(dense_folder, 'depths_mvsnet')
+        # Calculate normal map
+        normal_dmb = os.path.join(sub_depth_folder, 'normals.dmb')
+        gipuma_normal(out_depth_bin, normal_dmb)
 
-    # convert cameras
-    image_names = os.listdir(image_folder)
-    for image_name in image_names:
-        image_prefix = os.path.splitext(image_name)[0]
-        init_depth_map_path = os.path.join(
-            depth_folder, image_prefix+'_init.pfm')
-        prob_map_path = os.path.join(depth_folder, image_prefix+'_prob.pfm')
-        out_depth_map_path = os.path.join(
-            depth_folder, image_prefix+'_prob_filtered.pfm')
-
-        depth_map = load_pfm(open(init_depth_map_path))
-        prob_map = load_pfm(open(prob_map_path))
-        depth_map[prob_map < prob_threshold] = 0
-        write_pfm(out_depth_map_path, depth_map)
+        # Write out inverse depth image
+        disp_image = read_in_bin(out_depth_bin)
+        depth_image = 1.0/(disp_image+0.0000001)
+        maxdepth=100.0
+        depth_image[depth_image >= maxdepth] = maxdepth
+        depth_image[depth_image < 0.0] = 0
+        img_path = os.path.join(depth_folder, image_prefix+'.png')
+        print(img_path)
+        imageio.imwrite(img_path, depth_image)
 
 
 def depth_map_fusion(point_folder, fusibile_exe_path, disp_thresh, num_consistent):
@@ -192,8 +258,8 @@ def depth_map_fusion(point_folder, fusibile_exe_path, disp_thresh, num_consisten
     cam_folder = os.path.join(point_folder, 'cams')
     image_folder = os.path.join(point_folder, 'images')
     depth_min = 0.001
-    depth_max = 100000
-    normal_thresh = 360
+    depth_max = 100.0
+    normal_thresh = 360.0
 
     cmd = fusibile_exe_path
     cmd = cmd + ' -input_folder ' + point_folder + '/'
@@ -212,34 +278,41 @@ def depth_map_fusion(point_folder, fusibile_exe_path, disp_thresh, num_consisten
 
 if __name__ == '__main__':
 
+    ####################################################################################################################
+    #       USAGE:
+    #
+    #       python3  depthfusion.py --dense_folder=/home/ubuntu/my_deepdso_outputs
+    #
+    #       NOTE:
+    #
+    #       "--dense_folder" path must contain subfolders:  images, cams, depthmaps_deepdso
+    #
+    ####################################################################################################################
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--dense_folder', type=str, default='')
     parser.add_argument('--fusibile_exe_path', type=str,
-                        default='/home/yoyo/Documents/software/fusibile/fusibile')
-    parser.add_argument('--prob_threshold', type=float, default='0.8')
-    parser.add_argument('--disp_threshold', type=float, default='0.25')
+                        default='/home/ubuntu/fusibile/build/fusibile')
+    parser.add_argument('--disp_threshold', type=float, default='1.0')
     parser.add_argument('--num_consistent', type=float, default='3')
     args = parser.parse_args()
 
     dense_folder = args.dense_folder
     fusibile_exe_path = args.fusibile_exe_path
-    prob_threshold = args.prob_threshold
     disp_threshold = args.disp_threshold
     num_consistent = args.num_consistent
 
-    point_folder = os.path.join(dense_folder, 'points_mvsnet')
+    point_folder = os.path.join(dense_folder)
     if not os.path.isdir(point_folder):
         os.mkdir(point_folder)
 
-    # probability filter
-    print('filter depth map with probability map')
-    probability_filter(dense_folder, prob_threshold)
+    # Convert to gipuma format
+    print("----------------------------------------------------------------")
+    print('Convert deepDSO output to gipuma input')
+    deepdso_to_gipuma(dense_folder, point_folder)
 
-    # convert to gipuma format
-    print('Convert mvsnet output to gipuma input')
-    mvsnet_to_gipuma(dense_folder, point_folder)
-
-    # depth map fusion with gipuma
+    # Depth map fusion with gipuma
+    print("----------------------------------------------------------------")
     print('Run depth map fusion & filter')
     depth_map_fusion(point_folder, fusibile_exe_path,
                      disp_threshold, num_consistent)
