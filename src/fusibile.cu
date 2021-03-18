@@ -306,7 +306,7 @@ void copy_point_cloud_to_host(GlobalState &gs, int cam, PointCloudList &pc_list)
             p.coord = make_float4(0,0,0,0);
         }
     }
-    printf("Found %.2f million points\n", count/1000000.0f);
+    printf("Found %d points\n", count);
     pc_list.size = count;
 }
 

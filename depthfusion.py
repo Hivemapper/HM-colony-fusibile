@@ -80,13 +80,26 @@ def write_gipuma_dmb(path, image):
     return
 
 
-def gipuma_normal(in_depth_path, out_normal_path):
+def gipuma_normal(in_depth_path, out_normal_path, cam_intrin_path):
 
-    depth_image = read_in_bin(in_depth_path)
+    # Calculate the camera viewing vector
+    # Read in the Rotation matrix (R) for this camera
+    rotationM = np.zeros((3, 3), dtype=float)
+    with open(cam_intrin_path) as f:
+        content = f.readlines()
+        count=0
+        for line in content:
+            newline = (line.strip()).split()
+            rotationM[count, 0:3] = newline[0:3]
+            count = count + 1
+
+    # Calculate the view vector
+    rotationM_T = np.transpose(rotationM)
 
     # Calculate a normal image
     # zy, zx = np.gradient(depth_image)
     # You may also consider using Sobel to get a joint Gaussian smoothing and differentation to reduce noise
+    depth_image = read_in_bin(in_depth_path)
     zx = cv2.Sobel(depth_image, cv2.CV_64F, 1, 0, ksize=5)
     zy = cv2.Sobel(depth_image, cv2.CV_64F, 0, 1, ksize=5)
 
@@ -95,6 +108,17 @@ def gipuma_normal(in_depth_path, out_normal_path):
     normal[:, :, 0] /= n
     normal[:, :, 1] /= n
     normal[:, :, 2] /= n
+
+    # Convert the normal vectors from camera coordinates to global coordinates
+    # print(normal.shape)
+    for x in range(0,normal.shape[0]):
+        for y in range(0,normal.shape[1]):
+            inputV = np.array([normal[x, y, 0], normal[x, y, 1], normal[x, y, 2]])
+            convertedV = np.matmul(rotationM_T, inputV)
+            normal[x, y, 0] = convertedV[0]
+            normal[x, y, 1] = convertedV[1]
+            normal[x, y, 2] = convertedV[2]
+
     normal_image=normal
 
     # Make masking
@@ -166,7 +190,6 @@ def deepdso_to_gipuma_cam(intrin_path, extrin_path, out_dir):
                 cy = a[2]
 
     print("fx = ",fx, "  fy = ", fy, "  cx = ", cx, "  cy = ", cy, "  w = ", w, "  h = ", h)
-
     k = 1.0  # pixels/cm on image horizontal
     l = 1.0  # pixels/cm on image vertical
     # When k=l, the pixels are square (the most common case)
@@ -179,20 +202,29 @@ def deepdso_to_gipuma_cam(intrin_path, extrin_path, out_dir):
     intrinsic[2, 2] = 1.0
 
     # Make outputs for each camera pose
-    for i in range(0, numposes-1):
+    for pose in range(0, numposes-1):
 
         # Construct projection matrix
-        extrinsic = extrinsics[i, :, :]
+        extrinsic = extrinsics[pose, :, :]
         projection_matrix = np.matmul(intrinsic, extrinsic)
 
-        # Write out the camera file
-        out_path = out_dir + "/" + str(camera_prefixes[i]) + ".P"
+        # Write out the camera projection matrix file
+        out_path = out_dir + "/" + str(camera_prefixes[pose]) + ".P"
         f = open(out_path, "w")
         for i in range(0, 3):
             for j in range(0, 4):
                 f.write(str(projection_matrix[i][j]) + ' ')
             f.write('\n')
         f.write('\n')
+        f.close()
+
+        # Write out the camera extrinsics matrix file
+        out_path = out_dir + "/" + str(camera_prefixes[pose]) + ".extrin"
+        f = open(out_path, "w")
+        for i in range(0, 3):
+            for j in range(0, 4):
+                f.write(str(extrinsic[i][j]) + ' ')
+            f.write('\n')
         f.close()
 
     return
@@ -202,7 +234,7 @@ def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
 
     image_folder = os.path.join(dense_folder, 'images')
     cam_folder = os.path.join(dense_folder, 'cams')
-    depth_folder = os.path.join(dense_folder, 'depthmaps')
+    depth_folder = os.path.join(dense_folder, 'invdepthmaps')
 
     gipuma_cam_folder = os.path.join(gipuma_point_folder, 'cams')
     gipuma_image_folder = os.path.join(gipuma_point_folder, 'images')
@@ -220,13 +252,16 @@ def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
     deepdso_to_gipuma_cam(intrin_cam_file, extrin_cam_file, gipuma_cam_folder)
     camera_names = os.listdir(gipuma_cam_folder)
 
-    # Convert depth maps and normal maps. Only for depthmaps that correspond to a saved camera.
+    # Convert inverse depth maps and normal maps. Only for inverse depthmaps that correspond to a saved camera.
     # If the camera wasn't saved, it is likely because deepDSO considered it an
     # invalid pose / marginalized frame (see deepDSO output logs).
     gipuma_prefix = 'camera_data__'
     for camera_name in camera_names:
-
         image_prefix = os.path.splitext(camera_name)[0]
+        image_suffix = os.path.splitext(camera_name)[1]
+        if (image_suffix !=".P"):
+            continue
+
         sub_depth_folder = os.path.join(
             gipuma_point_folder, gipuma_prefix+(image_prefix))
         if not os.path.isdir(sub_depth_folder):
@@ -240,9 +275,10 @@ def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
 
         # Calculate normal map
         normal_dmb = os.path.join(sub_depth_folder, 'normals.dmb')
-        gipuma_normal(out_depth_bin, normal_dmb)
+        cam_intrin_path = gipuma_cam_folder + "/" + image_prefix + ".extrin"
+        gipuma_normal(out_depth_bin, normal_dmb, cam_intrin_path)
 
-        # Write out inverse depth image
+        # Save depth PNGs
         disp_image = read_in_bin(out_depth_bin)
         depth_image = 1.0/(disp_image+0.0000001)
         maxdepth=100.0
@@ -258,7 +294,7 @@ def depth_map_fusion(point_folder, fusibile_exe_path, disp_thresh, num_consisten
     cam_folder = os.path.join(point_folder, 'cams')
     image_folder = os.path.join(point_folder, 'images')
     depth_min = 0.001
-    depth_max = 100.0
+    depth_max = 1000.0
     normal_thresh = 360.0
 
     cmd = fusibile_exe_path
