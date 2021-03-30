@@ -1,1 +1,1 @@
-python3  depthfusion.py --dense_folder=/home/ubuntu/deepDSO_outputs --disp_threshold=100.0
+python3  depthfusion.py --image_folder=/home/ubuntu/deepDSO_outputs/images --dense_folder=/home/ubuntu/deepDSO_outputs --disp_threshold=0.1

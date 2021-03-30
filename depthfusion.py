@@ -230,20 +230,14 @@ def deepdso_to_gipuma_cam(intrin_path, extrin_path, out_dir):
     return
 
 
-def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
+def deepdso_to_gipuma(dense_folder, image_folder):
 
-    image_folder = os.path.join(dense_folder, 'images')
     cam_folder = os.path.join(dense_folder, 'cams')
     depth_folder = os.path.join(dense_folder, 'invdepthmaps')
 
-    gipuma_cam_folder = os.path.join(gipuma_point_folder, 'cams')
-    gipuma_image_folder = os.path.join(gipuma_point_folder, 'images')
-    if not os.path.isdir(gipuma_point_folder):
-        os.mkdir(gipuma_point_folder)
+    gipuma_cam_folder = os.path.join(dense_folder, 'cams')
     if not os.path.isdir(gipuma_cam_folder):
         os.mkdir(gipuma_cam_folder)
-    if not os.path.isdir(gipuma_image_folder):
-        os.mkdir(gipuma_image_folder)
 
     # Convert cameras
     image_names = os.listdir(image_folder)
@@ -263,7 +257,7 @@ def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
             continue
 
         sub_depth_folder = os.path.join(
-            gipuma_point_folder, gipuma_prefix+(image_prefix))
+            dense_folder, gipuma_prefix+(image_prefix))
         if not os.path.isdir(sub_depth_folder):
             os.mkdir(sub_depth_folder)
 
@@ -278,21 +272,20 @@ def deepdso_to_gipuma(dense_folder, gipuma_point_folder):
         cam_intrin_path = gipuma_cam_folder + "/" + image_prefix + ".extrin"
         gipuma_normal(out_depth_bin, normal_dmb, cam_intrin_path)
 
-        # Save depth PNGs
-        disp_image = read_in_bin(out_depth_bin)
-        depth_image = 1.0/(disp_image+0.0000001)
-        maxdepth=100.0
-        depth_image[depth_image >= maxdepth] = maxdepth
-        depth_image[depth_image < 0.0] = 0
-        img_path = os.path.join(depth_folder, image_prefix+'.png')
-        print(img_path)
-        imageio.imwrite(img_path, depth_image)
+        # # Save depth PNGs
+        # disp_image = read_in_bin(out_depth_bin)
+        # depth_image = 1.0/(disp_image+0.0000001)
+        # maxdepth=100.0
+        # depth_image[depth_image >= maxdepth] = maxdepth
+        # depth_image[depth_image < 0.0] = 0
+        # img_path = os.path.join(depth_folder, image_prefix+'.png')
+        # print(img_path)
+        # imageio.imwrite(img_path, depth_image)
 
 
-def depth_map_fusion(point_folder, fusibile_exe_path, disp_thresh, num_consistent):
+def depth_map_fusion(point_folder, image_folder, fusibile_exe_path, disp_thresh, num_consistent):
 
     cam_folder = os.path.join(point_folder, 'cams')
-    image_folder = os.path.join(point_folder, 'images')
     depth_min = 0.001
     depth_max = 1000.0
     normal_thresh = 360.0
@@ -317,15 +310,16 @@ if __name__ == '__main__':
     ####################################################################################################################
     #       USAGE:
     #
-    #       python3  depthfusion.py --dense_folder=/home/ubuntu/my_deepdso_outputs
+    #       python3  depthfusion.py --dense_folder=/home/ubuntu/my_deepdso_outputs --images_folder==/home/ubuntu/image_inputs
     #
     #       NOTE:
     #
-    #       "--dense_folder" path must contain subfolders:  images, cams, depthmaps_deepdso
+    #       "--dense_folder" path must contain subfolders:  cams, invdepthmaps
     #
     ####################################################################################################################
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--image_folder', type=str, default='')
     parser.add_argument('--dense_folder', type=str, default='')
     parser.add_argument('--fusibile_exe_path', type=str,
                         default='/home/ubuntu/fusibile/build/fusibile')
@@ -333,22 +327,17 @@ if __name__ == '__main__':
     parser.add_argument('--num_consistent', type=float, default='3')
     args = parser.parse_args()
 
-    dense_folder = args.dense_folder
     fusibile_exe_path = args.fusibile_exe_path
     disp_threshold = args.disp_threshold
     num_consistent = args.num_consistent
 
-    point_folder = os.path.join(dense_folder)
-    if not os.path.isdir(point_folder):
-        os.mkdir(point_folder)
-
     # Convert to gipuma format
     print("----------------------------------------------------------------")
     print('Convert deepDSO output to gipuma input')
-    deepdso_to_gipuma(dense_folder, point_folder)
+    deepdso_to_gipuma(args.dense_folder, args.image_folder)
 
     # Depth map fusion with gipuma
     print("----------------------------------------------------------------")
     print('Run depth map fusion & filter')
-    depth_map_fusion(point_folder, fusibile_exe_path,
+    depth_map_fusion(args.dense_folder, args.image_folder, fusibile_exe_path,
                      disp_threshold, num_consistent)
