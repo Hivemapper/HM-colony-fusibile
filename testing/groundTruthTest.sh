@@ -1,0 +1,1 @@
+python3  ground_truth_test.py --depthIN=/home/ubuntu/TJ/ground_truth_test/0000000000.png --intrinsic=/home/ubuntu/TJ/ground_truth_test/0000000000.txt --output=/home/ubuntu/TJ/ground_truth_test/ground_truth_test.ply

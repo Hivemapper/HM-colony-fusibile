@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Copyright 2021, Taylor Dahlke
-Convert deepDSO output to Gipuma format for post-processing.
+Do very simple inversion projection of depthmap points into 3D coordinate space.
 Based on python script from:
 https://github.com/YoYo000/MVSNet/blob/4c4aa5e2336a214e4bde2de31c9a46f55a8150c5/mvsnet/depthfusion.py
 """
@@ -299,12 +299,15 @@ def depth_map_fusion(point_folder, image_folder, dense_folder, intrin_path, disp
     ply_vec = []
     count=0
     gipuma_prefix = 'camera_data__'
+    scale=50
     for camera_name in camera_names:
         
         # For debugging only
-        count=count+1
-        if (count>2):
-            break
+        # count=count+1
+        # if (count>10):
+        #     break
+        if(not camera_name=="000006.extrin"):
+            continue
 
         image_prefix = os.path.splitext(camera_name)[0]
         image_suffix = os.path.splitext(camera_name)[1]
@@ -322,19 +325,18 @@ def depth_map_fusion(point_folder, image_folder, dense_folder, intrin_path, disp
         disp_image = read_in_bin(out_depth_bin)
 
         print(np.shape(disp_image))
+        print(fx,cx,fy,cy)
         # Project each pixel to 3D with camera coordinate system
-        for i in range(0, np.shape(disp_image)[0]):
-            for j in range(0, np.shape(disp_image)[1]):
+        for i in range(0, np.shape(disp_image)[0]): # Y axis (rows)
+            for j in range(0, np.shape(disp_image)[1]): # X axis (columns)
                 Z = 1.0/disp_image[i][j]
-                # print(j,cx,fx,Z)
-                # print(i,cy,fy,Z)
                 X = (j-cx)*Z/fx
                 Y = (i-cy)*Z/fy
 
                 # Convert to global coordinate system
 
                 # Append to PLY file
-                ply_vec.append((X, Y, Z))
+                ply_vec.append((scale*X, scale*Y, -scale*Z))
 
     # Write out the PLY file
     print("Writing PLY file ...")
@@ -353,7 +355,7 @@ if __name__ == '__main__':
     ####################################################################################################################
     #       USAGE:
     #
-    #       python3  depthfusion.py --dense_folder=/home/ubuntu/my_deepdso_outputs --images_folder==/home/ubuntu/image_inputs
+    #       python3  simple_inv_projection.py --dense_folder=/home/ubuntu/my_deepdso_outputs --images_folder==/home/ubuntu/image_inputs
     #
     #       NOTE:
     #
@@ -373,11 +375,6 @@ if __name__ == '__main__':
     fusibile_exe_path = args.fusibile_exe_path
     disp_threshold = args.disp_threshold
     num_consistent = args.num_consistent
-
-    # # Convert to gipuma format
-    # print("----------------------------------------------------------------")
-    # print('Convert deepDSO output to gipuma input')
-    # deepdso_to_gipuma(args.dense_folder, args.image_folder)
 
     # Depth map fusion with gipuma
     print("----------------------------------------------------------------")

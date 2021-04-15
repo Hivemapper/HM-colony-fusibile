@@ -272,15 +272,18 @@ def deepdso_to_gipuma(dense_folder, image_folder):
         cam_intrin_path = gipuma_cam_folder + "/" + image_prefix + ".extrin"
         gipuma_normal(out_depth_bin, normal_dmb, cam_intrin_path)
 
-        # # Save depth PNGs
-        # disp_image = read_in_bin(out_depth_bin)
-        # depth_image = 1.0/(disp_image+0.0000001)
-        # maxdepth=100.0
-        # depth_image[depth_image >= maxdepth] = maxdepth
-        # depth_image[depth_image < 0.0] = 0
-        # img_path = os.path.join(depth_folder, image_prefix+'.png')
-        # print(img_path)
-        # imageio.imwrite(img_path, depth_image)
+        # Save depth PNGs
+        disp_image = read_in_bin(out_depth_bin)
+        depth_image = 1.0/(disp_image+0.0000001)
+        maxdepth=30.0
+        mindepth=15.0
+        depth_image[depth_image >= maxdepth] = maxdepth
+        depth_image[depth_image < mindepth] = mindepth
+
+        depth_image = depth_image*depth_image*depth_image # Raise the depthmap values to a higher power to accentuate changes in depth for better debugging (like checking if flat surfaces are really flat)
+        img_path = os.path.join(depth_folder, image_prefix+'.png')
+        print(img_path)
+        imageio.imwrite(img_path, depth_image)
 
 
 def depth_map_fusion(point_folder, image_folder, fusibile_exe_path, disp_thresh, num_consistent):
@@ -322,7 +325,7 @@ if __name__ == '__main__':
     parser.add_argument('--image_folder', type=str, default='')
     parser.add_argument('--dense_folder', type=str, default='')
     parser.add_argument('--fusibile_exe_path', type=str,
-                        default='/home/ubuntu/fusibile/build/fusibile')
+                        default='/home/ubuntu/TJ/fusibile/build/fusibile')
     parser.add_argument('--disp_threshold', type=float, default='1.0')
     parser.add_argument('--num_consistent', type=float, default='3')
     args = parser.parse_args()
