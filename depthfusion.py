@@ -280,7 +280,8 @@ def deepdso_to_gipuma(dense_folder, image_folder):
         depth_image[depth_image >= maxdepth] = maxdepth
         depth_image[depth_image < mindepth] = mindepth
 
-        depth_image = depth_image*depth_image*depth_image # Raise the depthmap values to a higher power to accentuate changes in depth for better debugging (like checking if flat surfaces are really flat)
+        # Raise the depthmap values to a higher power to accentuate changes in depth for better debugging (like checking if flat surfaces are really flat)
+        depth_image = depth_image*depth_image*depth_image
         img_path = os.path.join(depth_folder, image_prefix+'.png')
         print(img_path)
         imageio.imwrite(img_path, depth_image)
